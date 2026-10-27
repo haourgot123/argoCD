@@ -1,0 +1,27 @@
+# Ingress khai báo rule để Traefik chuyển request HTTP vào Service của backend.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-lab-api
+  # Ingress và Service được tham chiếu phải nằm trong cùng namespace.
+  namespace: argocd-lab
+  labels:
+    app: argocd-lab-api
+spec:
+  # Khớp với IngressClass traefik đã có trên cluster.
+  ingressClassName: traefik
+  rules:
+    # Hostname test; cần trỏ hosts/DNS về địa chỉ có thể truy cập Traefik.
+    # Hostname này không tự được đăng ký DNS khi tạo Ingress.
+    - host: api.argocd-lab.test
+      http:
+        paths:
+          # Nhận mọi đường dẫn, gồm /, /health, /info và /docs; giữ nguyên path.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-lab-api
+                port:
+                  # Cổng Service là 80; Service chuyển tiếp đến port 8000 của Pod.
+                  number: 80

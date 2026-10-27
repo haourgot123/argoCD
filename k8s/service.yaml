@@ -1,0 +1,22 @@
+# Service cung cấp địa chỉ truy cập ổn định dù Pod được tạo lại và đổi IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-lab-api
+  # Service chọn Pod trong cùng namespace với nó.
+  namespace: argocd-lab
+  labels:
+    app: argocd-lab-api
+spec:
+  # Tạo IP nội bộ cluster; chưa mở cổng trực tiếp ra máy server.
+  type: ClusterIP
+  # Chọn các Pod có nhãn này, khớp với template.labels trong Deployment.
+  selector:
+    app: argocd-lab-api
+  ports:
+    - name: http
+      # Các ứng dụng trong cluster gọi Service qua cổng 80.
+      port: 80
+      # Chuyển request đến port tên "http" của Pod (8000 trong Deployment).
+      targetPort: http
+      protocol: TCP

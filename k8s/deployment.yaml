@@ -30,7 +30,7 @@ spec:
         - name: api
           # Image từ GHCR; tag chứa commit SHA được CI build.
           # Đổi tag sang image mới để Deployment rollout phiên bản mới.
-          image: ghcr.io/haourgot123/argocd:sha-6d823d7e3b70fe77af0ce5bc88e4f8f0666caa20
+          image: ghcr.io/haourgot123/argocd:sha-5c0ebdb987efa8a4307844078430ae53884c99e8
           # Chỉ tải image nếu node chưa có image mang tag này trong cache.
           imagePullPolicy: IfNotPresent
           # Khai báo port ứng dụng; phần này chưa tạo đường truy cập từ ngoài cluster.
@@ -45,7 +45,7 @@ spec:
               value: release
             # Version hiển thị qua API và Swagger để nhận biết bản đang chạy.
             - name: APP_VERSION
-              value: sha-6d823d7e3b70fe77af0ce5bc88e4f8f0666caa20
+              value: sha-5c0ebdb987efa8a4307844078430ae53884c99e8
           # Kiểm tra container đã sẵn sàng nhận request chưa.
           # Khi không Ready, Pod bị loại khỏi các endpoint sẵn sàng của Service.
           readinessProbe:

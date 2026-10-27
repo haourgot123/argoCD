@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - release
+    # Chỉ thay đổi manifest thì ArgoCD sync trực tiếp, không cần build lại image.
+    paths:
+      - backend/**
+      - .github/workflows/backend-ci.yml
+
+# Mỗi nhánh chỉ chạy một workflow tại một thời điểm.
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -16,6 +25,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
 
     steps:
       - name: Checkout source
@@ -54,3 +65,72 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  update-manifest:
+    name: Update deployment manifest
+    # Chỉ cập nhật Git sau khi image đã được build và push thành công.
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      IMAGE_REF: ${{ needs.build-and-push.outputs.image }}
+      IMAGE_TAG: sha-${{ github.sha }}
+
+    steps:
+      - name: Checkout latest release
+        uses: actions/checkout@v6
+        with:
+          # Lấy trạng thái mới nhất để giữ các thay đổi manifest trong lúc build.
+          ref: release
+          fetch-depth: 0
+          # Giữ GITHUB_TOKEN để bước git push xác thực được.
+          persist-credentials: true
+
+      - name: Check whether built source is still current
+        id: source
+        shell: bash
+        run: |
+          # Bỏ qua nếu release đã bị đổi lịch sử hoặc có code backend/CI mới hơn.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" HEAD; then
+            echo "Source commit is no longer on release; skipping manifest update."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          elif ! git diff --quiet "$GITHUB_SHA" HEAD -- backend/ .github/workflows/backend-ci.yml; then
+            echo "Newer backend or CI changes exist; their workflow will update the manifest."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update image and APP_VERSION
+        if: steps.source.outputs.current == 'true'
+        shell: bash
+        run: |
+          # Sửa đúng container api và biến APP_VERSION, giữ comment trong YAML.
+          docker run --rm --network none \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workdir" \
+            --env IMAGE_REF --env IMAGE_TAG \
+            mikefarah/yq:4.54.1 -i '
+              (.spec.template.spec.containers[] | select(.name == "api") | .image) = strenv(IMAGE_REF) |
+              (.spec.template.spec.containers[] | select(.name == "api") | .env[] | select(.name == "APP_VERSION") | .value) = strenv(IMAGE_TAG)
+            ' k8s/deployment.yaml
+
+      - name: Commit and push manifest
+        if: steps.source.outputs.current == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- k8s/deployment.yaml
+
+          # Chạy lại cùng một bản build thì không tạo commit dư thừa.
+          if git diff --cached --quiet; then
+            echo "Manifest already uses ${IMAGE_TAG}."
+            exit 0
+          fi
+
+          git commit -m "chore(deploy): update backend to ${IMAGE_TAG}"
+          # Push thường để Git từ chối nếu release vừa có commit khác; không force push.
+          git push origin HEAD:release

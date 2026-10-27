@@ -102,6 +102,34 @@ Application mặc định nằm trong namespace `argocd`, triển khai backend v
 trên cùng cluster. Nếu repo Git là private, cần kết nối repo với ArgoCD;
 nếu package GHCR là private, cần cấu hình `imagePullSecrets` cho Pod để kéo image.
 
+## Test routing qua Traefik
+
+`k8s/ingress.yaml` dùng IngressClass `traefik` và hostname `api.argocd-lab.test`.
+Ingress không chỉ định entrypoint, nên dùng các entrypoint mặc định của Traefik.
+Để test HTTP như bên dưới, cấu hình mặc định cần nhận HTTP qua cổng 80.
+Merge file này vào nhánh `release` để ArgoCD sync.
+Rule chuyển mọi path vào Service `argocd-lab-api:80`, rồi đến Pod FastAPI ở port `8000`.
+
+Địa chỉ truy cập phải là IP mà Traefik đang nhận kết nối HTTP cổng 80
+(có thể là IP server nếu Traefik đã expose cổng này trên server).
+Test bằng `curl` mà không cần sửa DNS; thay giá trị bên dưới bằng IP thực tế:
+
+```bash
+TRAEFIK_IP="<IP_TRUY_CAP_TRAEFIK>"
+curl --resolve "api.argocd-lab.test:80:${TRAEFIK_IP}" \
+  http://api.argocd-lab.test/health
+```
+
+Kết quả mong đợi: `{"status":"ok"}`.
+Để mở Swagger bằng trình duyệt, thêm dòng sau vào file `hosts` trên máy chạy trình duyệt
+(macOS/Linux: `/etc/hosts`), thay placeholder bằng IP thực tế:
+
+```text
+<IP_TRUY_CAP_TRAEFIK> api.argocd-lab.test
+```
+
+Sau đó mở <http://api.argocd-lab.test/docs>. Cấu hình này dùng HTTP cho lab, chưa cấu hình TLS.
+
 ## Biến môi trường
 
 | Biến | Mặc định | Ý nghĩa |

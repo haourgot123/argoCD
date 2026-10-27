@@ -1,0 +1,37 @@
+# Application cho ArgoCD biết lấy manifest ở đâu và triển khai vào cluster nào.
+# Đặt ngoài k8s/ để app không tự quản lý chính tài nguyên Application này.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-lab-api
+  # Namespace đang cài ArgoCD; sửa nếu bạn cài ở namespace khác.
+  namespace: argocd
+spec:
+  # Dùng project mặc định của ArgoCD cho bài lab.
+  project: default
+
+  source:
+    # Repo chứa Deployment và Service. Repo private cần kết nối trước với ArgoCD.
+    repoURL: https://github.com/haourgot123/argoCD.git
+    # Theo dõi manifest trên nhánh release.
+    targetRevision: release
+    # Đường dẫn tương đối từ thư mục gốc repo.
+    path: k8s
+
+  destination:
+    # Địa chỉ Kubernetes API bên trong cluster đang cài ArgoCD.
+    # Không cần thay bằng IP máy server nếu triển khai vào cùng cluster này.
+    server: https://kubernetes.default.svc
+    # Namespace triển khai backend, khớp với Deployment và Service.
+    namespace: argocd-lab
+
+  syncPolicy:
+    # Tự sync khi manifest trong Git khác với trạng thái trong cluster.
+    automated:
+      # Xóa tài nguyên do app quản lý khi tài nguyên đó bị xóa khỏi Git.
+      prune: true
+      # Tự đưa tài nguyên về cấu hình trong Git nếu bị sửa trực tiếp trên cluster.
+      selfHeal: true
+    syncOptions:
+      # Tạo namespace đích argocd-lab nếu chưa tồn tại.
+      - CreateNamespace=true

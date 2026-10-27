@@ -1,0 +1,82 @@
+# Phiên bản API Kubernetes dành cho tài nguyên Deployment.
+apiVersion: apps/v1
+# Deployment quản lý các Pod và rollout khi cấu hình Pod thay đổi, ví dụ đổi image.
+kind: Deployment
+metadata:
+  # Tên Deployment, dùng khi xem trạng thái hoặc log bằng kubectl.
+  name: argocd-lab-api
+  # Namespace chứa Deployment; phải được tạo trước hoặc do ArgoCD tạo khi sync.
+  namespace: argocd-lab
+  # Nhãn của Deployment để phân loại và tìm kiếm tài nguyên.
+  labels:
+    app: argocd-lab-api
+spec:
+  # Số Pod mong muốn chạy cho backend.
+  replicas: 1
+  # Deployment quản lý các Pod có nhãn này.
+  # Phải khớp với spec.template.metadata.labels bên dưới.
+  selector:
+    matchLabels:
+      app: argocd-lab-api
+  # Khuôn mẫu để Deployment tạo Pod mới.
+  template:
+    metadata:
+      # Nhãn gắn lên từng Pod, cũng có thể dùng làm selector cho Service.
+      labels:
+        app: argocd-lab-api
+    spec:
+      containers:
+        # Tên container bên trong Pod.
+        - name: api
+          # Image từ GHCR; tag chứa commit SHA được CI build.
+          # Đổi tag sang image mới để Deployment rollout phiên bản mới.
+          image: ghcr.io/haourgot123/argocd:sha-6d823d7e3b70fe77af0ce5bc88e4f8f0666caa20
+          # Chỉ tải image nếu node chưa có image mang tag này trong cache.
+          imagePullPolicy: IfNotPresent
+          # Khai báo port ứng dụng; phần này chưa tạo đường truy cập từ ngoài cluster.
+          ports:
+            # Đặt tên port để probe và Service có thể tham chiếu bằng tên "http".
+            - name: http
+              containerPort: 8000
+          # Biến môi trường được FastAPI đọc khi khởi động.
+          env:
+            # Tên môi trường hiển thị ở endpoint /info.
+            - name: APP_ENV
+              value: release
+            # Version hiển thị qua API và Swagger để nhận biết bản đang chạy.
+            - name: APP_VERSION
+              value: sha-6d823d7e3b70fe77af0ce5bc88e4f8f0666caa20
+          # Kiểm tra container đã sẵn sàng nhận request chưa.
+          # Khi không Ready, Pod bị loại khỏi các endpoint sẵn sàng của Service.
+          readinessProbe:
+            httpGet:
+              # Gọi HTTP /health trên port "http" (8000) của container.
+              path: /health
+              port: http
+            # Chờ 3 giây sau khi container khởi động rồi bắt đầu kiểm tra.
+            initialDelaySeconds: 3
+            # Kiểm tra mỗi 5 giây; mỗi lần chờ tối đa 2 giây.
+            periodSeconds: 5
+            timeoutSeconds: 2
+          # Kiểm tra container còn hoạt động không.
+          # Nếu thất bại liên tiếp đạt ngưỡng, kubelet khởi động lại container.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            # Chờ 10 giây để app có thời gian khởi động.
+            initialDelaySeconds: 10
+            # Kiểm tra mỗi 10 giây; mỗi lần chờ tối đa 2 giây.
+            periodSeconds: 10
+            timeoutSeconds: 2
+          # Tài nguyên CPU/RAM cho container, phù hợp một backend nhỏ dùng làm lab.
+          resources:
+            # Scheduler dựa vào requests để chọn node đủ tài nguyên cho Pod.
+            requests:
+              # 100m = 0,1 CPU; Mi là mebibyte.
+              cpu: 100m
+              memory: 128Mi
+            # CPU bị giới hạn ở 0,5 CPU; vượt giới hạn RAM có thể bị OOMKilled.
+            limits:
+              cpu: 500m
+              memory: 256Mi
